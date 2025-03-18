@@ -66,8 +66,8 @@ Setelah itu, pilih:
   // Jika gender sudah diset dan user tidak sedang chat atau menunggu
   if (!activeChats[chatId] && !waitingUsers.find(u => u.chatId === chatId)) {
     const message = 
-`*RuangRahasia*
-Gender kamu: *${userProfiles[chatId].gender}*.
+`Gender kamu: *${userProfiles[chatId].gender}*.
+
 Pilih aksi:
 • *Cari Partner*
 • *Set Gender* (ubah)
@@ -88,12 +88,11 @@ Pilih aksi:
   // Jika user sedang dalam sesi chat aktif
   if (activeChats[chatId]) {
     const message = 
-`*RuangRahasia*
-Kamu sedang chat dengan partner.
+`Kamu sedang chat dengan partner.
+
 Pilih:
 • *Next* untuk ganti partner.
-• *End Chat* untuk akhiri sesi.
-• *Help* untuk panduan.`;
+• *End Chat* untuk akhiri sesi.`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
