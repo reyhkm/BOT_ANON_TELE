@@ -5,7 +5,7 @@ const TelegramBot = require('node-telegram-bot-api');
 
 // Hardcode token dan URL webhook (ganti dengan nilai milikmu)
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
-const WEBHOOK_URL = 'https://your-app-url.railway.app';
+const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
 
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
