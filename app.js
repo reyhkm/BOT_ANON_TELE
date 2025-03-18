@@ -92,7 +92,8 @@ Pilih aksi:
 
 Pilih:
 • *Next* untuk ganti partner.
-• *End Chat* untuk akhiri sesi.`;
+• *End Chat* untuk akhiri sesi.
+• *Help* untuk panduan.`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
