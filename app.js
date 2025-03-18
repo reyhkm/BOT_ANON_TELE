@@ -176,7 +176,7 @@ function showHelp(chatId) {
 Perintah yang tersedia:
 
 • /start - Mulai bot dan tampilkan menu sesuai status kamu  
-• /setgender [male|female] - Set atau ubah gender kamu  
+• /setgender - Set atau ubah gender kamu  
 • /find - Cari partner chat anonim (hanya tersedia jika gender sudah diset)  
 • /next - Ganti partner chat aktif dengan yang baru (jika sudah terhubung)  
 • /end - Akhiri sesi chat yang aktif  
