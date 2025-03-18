@@ -41,9 +41,11 @@ function sendDynamicMenu(chatId) {
   // Jika gender belum diset, tampilkan pesan dan menu Set Gender & Help
   if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
     const message = 
-`*RuangRahasia*
-Selamat datang di RuangRahasia, platform chat anonim dari hikam.
-Untuk mulai, atur gender kamu dengan klik tombol *Set Gender*.
+`Selamat datang di *RuangRahasia*
+Platform chat anonim dari *hikam* :)
+
+Silahkan atur gender kamu dengan klik tombol *Set Gender*.
+
 Setelah itu, pilih:
 • *Cari Partner* untuk obrolan anonim.
 • *Next* untuk ganti partner.
