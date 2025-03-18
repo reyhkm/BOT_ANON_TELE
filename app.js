@@ -7,15 +7,14 @@ const TelegramBot = require('node-telegram-bot-api');
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
 const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
 
+
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
 
 // Set webhook dengan URL yang disediakan
-bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`).then(() => {
-  console.log(`Webhook telah diset ke ${WEBHOOK_URL}/bot${TOKEN}`);
-}).catch(err => {
-  console.error('Gagal menyetel webhook:', err);
-});
+bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
+  .then(() => console.log(`Webhook telah diset ke ${WEBHOOK_URL}/bot${TOKEN}`))
+  .catch(err => console.error('Gagal menyetel webhook:', err));
 
 // Inisialisasi Express
 const app = express();
@@ -25,25 +24,6 @@ app.use(bodyParser.json());
 let waitingUsers = []; // [{ chatId }]
 let activeChats = {};  // { chatId: partnerChatId }
 let userProfiles = {}; // { chatId: { gender: 'male'|'female' } }
-
-// Inline Keyboard Main Menu (semua opsi)
-const mainMenuKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: 'Set Gender', callback_data: 'menu_set_gender' },
-        { text: 'Cari Partner', callback_data: 'menu_find' }
-      ],
-      [
-        { text: 'Next', callback_data: 'menu_next' },
-        { text: 'End Chat', callback_data: 'menu_end' }
-      ],
-      [
-        { text: 'Help', callback_data: 'menu_help' }
-      ]
-    ]
-  }
-};
 
 // Inline Keyboard untuk pemilihan Gender
 const genderKeyboard = {
@@ -57,39 +37,98 @@ const genderKeyboard = {
   }
 };
 
-// Fungsi untuk mengirim main menu ke user
-function sendMainMenu(chatId) {
-  const menuMessage =
-`*AnonChat Bot*
-Selamat datang di Chat Bot Anonim!
+// Fungsi untuk mengirim menu dinamis sesuai status user
+function sendDynamicMenu(chatId) {
+  // Jika gender belum diset, tampilkan menu _Set Gender_ dan _Help_
+  if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
+    const message = 
+`*AnonChat Bot*  
+Selamat datang!  
+Sebelum mulai, silakan set gender kamu terlebih dahulu.`;
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Set Gender', callback_data: 'menu_set_gender' }],
+          [{ text: 'Help', callback_data: 'menu_help' }]
+        ]
+      }
+    };
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown', ...keyboard });
+    return;
+  }
 
-Kamu bisa menggunakan tombol di bawah ini atau perintah slash (misal: /setgender, /find, /next, /end, /help).
+  // Jika gender sudah diset dan user sedang tidak dalam sesi aktif maupun antrian
+  if (!activeChats[chatId] && !waitingUsers.find(u => u.chatId === chatId)) {
+    const message = 
+`*AnonChat Bot*  
+Gender kamu sudah diset ke *${userProfiles[chatId].gender}*.  
+Silakan pilih aksi yang ingin kamu lakukan:`;
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Cari Partner', callback_data: 'menu_find' }],
+          [{ text: 'Set Gender', callback_data: 'menu_set_gender' }],
+          [{ text: 'Help', callback_data: 'menu_help' }]
+        ]
+      }
+    };
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown', ...keyboard });
+    return;
+  }
 
-Pilih aksi yang kamu inginkan:`;
-  bot.sendMessage(chatId, menuMessage, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+  // Jika user sedang dalam sesi chat aktif
+  if (activeChats[chatId]) {
+    const message = 
+`*AnonChat Bot*  
+Kamu sedang dalam sesi chat dengan partner.  
+Jika ingin ganti partner, klik *Next* atau akhiri chat dengan *End Chat*.`;
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Next', callback_data: 'menu_next' }, { text: 'End Chat', callback_data: 'menu_end' }],
+          [{ text: 'Help', callback_data: 'menu_help' }]
+        ]
+      }
+    };
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown', ...keyboard });
+    return;
+  }
+
+  // Jika user sedang dalam antrian mencari partner
+  if (waitingUsers.find(u => u.chatId === chatId)) {
+    const message = 
+`*AnonChat Bot*  
+Sedang mencari partner untukmu, silakan tunggu ya...`;
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Help', callback_data: 'menu_help' }]
+        ]
+      }
+    };
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown', ...keyboard });
+    return;
+  }
 }
 
-// Fungsi utilitas untuk menghapus user dari waiting list
+// Utilitas: hapus user dari antrian
 function removeWaitingUser(chatId) {
   waitingUsers = waitingUsers.filter(user => user.chatId !== chatId);
 }
 
 // Fungsi untuk mencocokkan partner
 function matchUser(chatId) {
-  // Pastikan user tidak dobel di antrian
   removeWaitingUser(chatId);
 
-  // Jika tidak ada user yang sedang menunggu, masukkan ke antrian
+  // Jika tidak ada user menunggu, masukkan ke antrian
   if (waitingUsers.length === 0) {
     waitingUsers.push({ chatId });
     bot.sendMessage(chatId, 'Sedang mencari partner anonim untukmu, tunggu ya...');
     return;
   }
   
-  // Ambil partner pertama yang sedang menunggu
+  // Ambil partner pertama dari antrian
   const partner = waitingUsers.shift();
-  
-  // Buat koneksi chat antara kedua user
   activeChats[chatId] = partner.chatId;
   activeChats[partner.chatId] = chatId;
   
@@ -97,7 +136,7 @@ function matchUser(chatId) {
   bot.sendMessage(partner.chatId, 'Partner ditemukan! Mulai ngobrol secara anonim.');
 }
 
-// Handler untuk mengakhiri sesi chat aktif (untuk /end)
+// Fungsi untuk mengakhiri sesi chat aktif (End Chat)
 function endChat(chatId) {
   const partnerId = activeChats[chatId];
   if (partnerId) {
@@ -105,16 +144,17 @@ function endChat(chatId) {
     delete activeChats[partnerId];
     
     bot.sendMessage(chatId, 'Chat dengan partner telah diakhiri.');
-    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru dengan /find atau main menu.');
+    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru setelahnya.');
   } else {
-    bot.sendMessage(chatId, 'Kamu belum berada dalam chat aktif.');
+    bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat.');
   }
 }
 
-// Fungsi untuk fitur Next: mengakhiri chat aktif dan mencari partner baru
+// Fungsi untuk fitur Next: mengakhiri sesi aktif dan mencari partner baru
 function nextChat(chatId) {
+  // Validasi: tidak bisa Next jika sedang dalam antrian
   if (waitingUsers.find(u => u.chatId === chatId)) {
-    bot.sendMessage(chatId, 'Kamu sedang dalam antrian mencari partner, tidak bisa ganti partner.');
+    bot.sendMessage(chatId, 'Kamu sedang dalam antrian, tidak bisa ganti partner saat ini.');
     return;
   }
   if (activeChats[chatId]) {
@@ -122,28 +162,27 @@ function nextChat(chatId) {
     delete activeChats[chatId];
     delete activeChats[partnerId];
     bot.sendMessage(chatId, 'Mengakhiri chat dengan partner dan mencari partner baru...');
-    bot.sendMessage(partnerId, 'Partner kamu telah memilih untuk mencari partner baru.');
-    // Panggil fungsi pencarian partner untuk chatId
+    bot.sendMessage(partnerId, 'Partner kamu memilih untuk mencari partner baru.');
     matchUser(chatId);
   } else {
-    bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat aktif.');
+    bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat.');
   }
 }
 
 // Fungsi untuk menampilkan pesan bantuan
 function showHelp(chatId) {
   const helpMessage =
-`*Help - Panduan Penggunaan AnonChat Bot*
-Berikut perintah yang dapat kamu gunakan:
+`*Help - Panduan Penggunaan AnonChat Bot*  
+Perintah yang tersedia:
 
-• /start - Memulai bot dan menampilkan main menu  
-• /setgender [male|female] - Set gender kamu (atau klik tombol "Set Gender")  
-• /find - Cari partner chat anonim (atau klik tombol "Cari Partner")  
-• /next - Ganti partner chat aktif dengan yang baru (atau klik tombol "Next")  
-• /end - Akhiri sesi chat yang aktif (atau klik tombol "End Chat")  
-• /help - Tampilkan pesan bantuan
+• /start - Mulai bot dan tampilkan menu sesuai status kamu  
+• /setgender [male|female] - Set atau ubah gender kamu  
+• /find - Cari partner chat anonim (hanya tersedia jika gender sudah diset)  
+• /next - Ganti partner chat aktif dengan yang baru (jika sudah terhubung)  
+• /end - Akhiri sesi chat yang aktif  
+• /help - Tampilkan panduan penggunaan
 
-Kamu juga bisa menggunakan tombol di main menu untuk navigasi.`;
+Kamu juga dapat menggunakan tombol di menu untuk navigasi.`;
   bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
 }
 
@@ -164,7 +203,7 @@ bot.on('message', (msg) => {
 
     switch (command) {
       case '/start':
-        sendMainMenu(chatId);
+        sendDynamicMenu(chatId);
         break;
 
       case '/setgender':
@@ -176,7 +215,7 @@ bot.on('message', (msg) => {
           }
           userProfiles[chatId] = { gender };
           bot.sendMessage(chatId, `Gender kamu telah diset ke: ${gender}`);
-          sendMainMenu(chatId);
+          sendDynamicMenu(chatId);
         } else {
           bot.sendMessage(chatId, 'Pilih gender kamu:', genderKeyboard);
         }
@@ -184,15 +223,15 @@ bot.on('message', (msg) => {
 
       case '/find':
         if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
-          bot.sendMessage(chatId, 'Sebelum mencari partner, set gender kamu terlebih dahulu dengan /setgender atau melalui main menu.');
+          bot.sendMessage(chatId, 'Silakan set gender terlebih dahulu dengan /setgender atau lewat menu.');
           return;
         }
         if (activeChats[chatId]) {
-          bot.sendMessage(chatId, 'Kamu sudah sedang berada dalam chat dengan partner.');
+          bot.sendMessage(chatId, 'Kamu sudah sedang dalam sesi chat.');
           return;
         }
         if (waitingUsers.find(u => u.chatId === chatId)) {
-          bot.sendMessage(chatId, 'Kamu sudah dalam antrian mencari partner, tunggu ya...');
+          bot.sendMessage(chatId, 'Kamu sudah dalam antrian, tunggu ya...');
           return;
         }
         matchUser(chatId);
@@ -225,7 +264,7 @@ bot.on('message', (msg) => {
       const partnerId = activeChats[chatId];
       bot.sendMessage(partnerId, text);
     } else {
-      bot.sendMessage(chatId, 'Kamu belum berada dalam chat aktif. Gunakan /find atau pilih "Cari Partner" dari main menu.');
+      bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat. Silakan cari partner melalui menu atau dengan /find.');
     }
   }
 });
@@ -243,22 +282,22 @@ bot.on('callback_query', (callbackQuery) => {
     userProfiles[chatId] = { gender: 'male' };
     bot.answerCallbackQuery(callbackQuery.id, { text: "Gender diset ke male" });
     bot.sendMessage(chatId, "Gender kamu telah diset ke male.");
-    sendMainMenu(chatId);
+    sendDynamicMenu(chatId);
   } else if (action === 'set_gender_female') {
     userProfiles[chatId] = { gender: 'female' };
     bot.answerCallbackQuery(callbackQuery.id, { text: "Gender diset ke female" });
     bot.sendMessage(chatId, "Gender kamu telah diset ke female.");
-    sendMainMenu(chatId);
+    sendDynamicMenu(chatId);
   } else if (action === 'menu_find') {
     if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
       bot.answerCallbackQuery(callbackQuery.id, { text: "Set gender dulu ya!" });
-      bot.sendMessage(chatId, 'Sebelum mencari partner, set gender kamu terlebih dahulu dengan /setgender atau klik "Set Gender".');
+      bot.sendMessage(chatId, 'Silakan set gender kamu terlebih dahulu melalui /setgender atau tombol "Set Gender".');
     } else if (activeChats[chatId]) {
       bot.answerCallbackQuery(callbackQuery.id, { text: "Kamu sudah sedang chat." });
-      bot.sendMessage(chatId, 'Kamu sudah sedang berada dalam chat dengan partner.');
+      bot.sendMessage(chatId, 'Kamu sudah dalam sesi chat dengan partner.');
     } else if (waitingUsers.find(u => u.chatId === chatId)) {
-      bot.answerCallbackQuery(callbackQuery.id, { text: "Sedang menunggu partner." });
-      bot.sendMessage(chatId, 'Kamu sudah dalam antrian mencari partner, tunggu ya...');
+      bot.answerCallbackQuery(callbackQuery.id, { text: "Sedang mencari partner." });
+      bot.sendMessage(chatId, 'Kamu sudah dalam antrian, tunggu ya...');
     } else {
       bot.answerCallbackQuery(callbackQuery.id);
       matchUser(chatId);
