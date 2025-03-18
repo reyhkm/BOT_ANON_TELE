@@ -43,8 +43,8 @@ function sendDynamicMenu(chatId) {
   if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
     const message = 
 `*AnonChat Bot*  
-Selamat datang!  
-Sebelum mulai, silakan set gender kamu terlebih dahulu.`;
+Selamat datang di AnonChat Bot, diciptakan oleh hikam.  
+Untuk memulai pengalaman chat anonim yang seru dan aman, silakan atur gender kamu terlebih dahulu.`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
