@@ -10,162 +10,201 @@ const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
 
-// Set webhook dengan URL yang disediakan
-bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`).then(() => {
-  console.log(`Webhook telah diset ke ${WEBHOOK_URL}/bot${TOKEN}`);
-}).catch(err => {
-  console.error('Gagal menyetel webhook:', err);
-});
+// Set webhook
+bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
+  .then(() => console.log(`Webhook disetel ke ${WEBHOOK_URL}/bot${TOKEN}`))
+  .catch(err => console.error('Gagal menyetel webhook:', err));
 
 // Inisialisasi Express
 const app = express();
 app.use(bodyParser.json());
 
-// Struktur data in-memory
-let waitingUsers = []; // [{ chatId, gender }]
+// Penyimpanan data in-memory
+let waitingUsers = []; // [{ chatId }]
 let activeChats = {};  // { chatId: partnerChatId }
 let userProfiles = {}; // { chatId: { gender: 'male'|'female' } }
 
-// Fungsi utilitas untuk menghapus user dari waiting list
+// Fungsi untuk menghapus user dari waiting list
 function removeWaitingUser(chatId) {
   waitingUsers = waitingUsers.filter(user => user.chatId !== chatId);
 }
 
-// Fungsi untuk mencocokkan partner
+// Kirim pesan untuk memilih gender dengan inline keyboard
+function sendGenderSelection(chatId) {
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: 'Male', callback_data: 'gender_male' },
+        { text: 'Female', callback_data: 'gender_female' }
+      ]
+    ]
+  };
+  bot.sendMessage(chatId, 'Pilih gender kamu:', { reply_markup: keyboard });
+}
+
+// Kirim menu utama berdasarkan status user (sedang chat atau tidak)
+function sendMainMenu(chatId) {
+  if (activeChats[chatId]) {
+    // Jika sedang dalam sesi chat, tampilkan opsi untuk mengakhiri chat
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: 'Akhiri Chat', callback_data: 'end_chat' }]
+      ]
+    };
+    bot.sendMessage(chatId, 'Kamu sedang dalam sesi chat.', { reply_markup: keyboard });
+  } else {
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: 'Cari Partner', callback_data: 'find_partner' }],
+        [{ text: 'Ubah Gender', callback_data: 'change_gender' }]
+      ]
+    };
+    bot.sendMessage(chatId, 'Silakan pilih menu:', { reply_markup: keyboard });
+  }
+}
+
+// Fungsi untuk mencocokkan partner chat
 function matchUser(chatId) {
-  // Jika user sudah terdaftar di waiting list, jangan dobel
   removeWaitingUser(chatId);
   
-  // Jika tidak ada user yang sedang menunggu, masukkan ke waiting list
   if (waitingUsers.length === 0) {
     waitingUsers.push({ chatId });
     bot.sendMessage(chatId, 'Sedang mencari partner anonim untukmu, tunggu ya...');
     return;
   }
   
-  // Ambil partner pertama yang sedang menunggu
   const partner = waitingUsers.shift();
-  
-  // Buat koneksi chat antara kedua user
   activeChats[chatId] = partner.chatId;
   activeChats[partner.chatId] = chatId;
   
   bot.sendMessage(chatId, 'Partner ditemukan! Mulai ngobrol secara anonim.');
   bot.sendMessage(partner.chatId, 'Partner ditemukan! Mulai ngobrol secara anonim.');
+  sendMainMenu(chatId);
+  sendMainMenu(partner.chatId);
 }
 
-// Handler untuk mengakhiri sesi chat aktif
+// Fungsi untuk mengakhiri sesi chat aktif
 function endChat(chatId) {
   const partnerId = activeChats[chatId];
   if (partnerId) {
-    // Hapus kedua user dari activeChats
     delete activeChats[chatId];
     delete activeChats[partnerId];
     
     bot.sendMessage(chatId, 'Chat dengan partner telah diakhiri.');
-    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru dengan /find.');
+    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru.');
+    sendMainMenu(chatId);
+    sendMainMenu(partnerId);
   } else {
     bot.sendMessage(chatId, 'Kamu belum berada dalam chat aktif.');
   }
 }
 
-// Fungsi untuk menampilkan pesan bantuan
-function showHelp(chatId) {
-  const helpMessage = 
-`Perintah yang tersedia:
-/start - Memulai bot dan melihat petunjuk
-/setgender [male|female] - Set gender kamu
-/find - Cari partner chat anonim
-/end - Akhiri sesi chat yang aktif
-/help - Tampilkan pesan bantuan`;
-  bot.sendMessage(chatId, helpMessage);
-}
-
-// Proses update dari webhook Telegram
+// Endpoint webhook untuk menerima update dari Telegram
 app.post(`/bot${TOKEN}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// Listener untuk semua pesan masuk
+// Handler callback query untuk inline keyboard
+bot.on('callback_query', (callbackQuery) => {
+  const data = callbackQuery.data;
+  const chatId = callbackQuery.message.chat.id;
+  
+  if (data.startsWith('gender_')) {
+    // Callback untuk pemilihan gender
+    const gender = data.split('_')[1];
+    userProfiles[chatId] = { gender };
+    bot.answerCallbackQuery(callbackQuery.id, { text: `Gender diset ke ${gender}` });
+    bot.sendMessage(chatId, `Gender kamu telah diset ke: ${gender}`);
+    sendMainMenu(chatId);
+    
+  } else if (data === 'find_partner') {
+    // Pastikan gender sudah diset
+    if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
+      bot.answerCallbackQuery(callbackQuery.id, { text: 'Silakan set gender terlebih dahulu.' });
+      sendGenderSelection(chatId);
+      return;
+    }
+    // Cegah pencarian dobel
+    if (activeChats[chatId]) {
+      bot.answerCallbackQuery(callbackQuery.id, { text: 'Kamu sudah dalam sesi chat.' });
+      return;
+    }
+    if (waitingUsers.find(u => u.chatId === chatId)) {
+      bot.answerCallbackQuery(callbackQuery.id, { text: 'Kamu sudah menunggu partner.' });
+      return;
+    }
+    bot.answerCallbackQuery(callbackQuery.id);
+    matchUser(chatId);
+    
+  } else if (data === 'end_chat') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    endChat(chatId);
+    
+  } else if (data === 'change_gender') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    sendGenderSelection(chatId);
+    
+  } else {
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Perintah tidak dikenali.' });
+  }
+});
+
+// Handler untuk pesan teks
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text ? msg.text.trim() : '';
 
-  // Jika pesan adalah perintah, proses perintahnya
+  // Jika pesan merupakan perintah (contoh: /start, /help)
   if (text.startsWith('/')) {
     const parts = text.split(' ');
     const command = parts[0].toLowerCase();
+    
+    if (command === '/start') {
+      if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
+        bot.sendMessage(chatId, 'Selamat datang! Silakan pilih gender kamu:', {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: 'Male', callback_data: 'gender_male' },
+                { text: 'Female', callback_data: 'gender_female' }
+              ]
+            ]
+          }
+        });
+      } else {
+        bot.sendMessage(chatId, 'Selamat datang kembali!', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Cari Partner', callback_data: 'find_partner' }],
+              [{ text: 'Ubah Gender', callback_data: 'change_gender' }]
+            ]
+          }
+        });
+      }
+    } else if (command === '/help') {
+      bot.sendMessage(chatId, `Menu bantuan:
+- /start: Mulai bot dan tampilkan menu
+- /help: Tampilkan pesan bantuan
 
-    switch (command) {
-      case '/start':
-        bot.sendMessage(chatId, `Selamat datang di Bot Chat Anonim!
-Silakan set gender kamu dengan perintah /setgender [male|female]
-Kemudian, cari partner dengan /find.
-Untuk bantuan, ketik /help`);
-        break;
-
-      case '/setgender':
-        if (parts.length < 2) {
-          bot.sendMessage(chatId, 'Mohon sertakan gender. Contoh: /setgender male');
-          return;
-        }
-        const gender = parts[1].toLowerCase();
-        if (gender !== 'male' && gender !== 'female') {
-          bot.sendMessage(chatId, 'Gender tidak valid. Hanya menerima "male" atau "female".');
-          return;
-        }
-        userProfiles[chatId] = { gender };
-        bot.sendMessage(chatId, `Gender kamu telah diset ke: ${gender}`);
-        break;
-
-      case '/find':
-        // Validasi: pastikan user sudah mengatur gender
-        if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
-          bot.sendMessage(chatId, 'Sebelum mencari partner, silakan set gender kamu dengan /setgender [male|female].');
-          return;
-        }
-        // Jika user sudah sedang aktif chat, informasikan
-        if (activeChats[chatId]) {
-          bot.sendMessage(chatId, 'Kamu sudah sedang berada dalam chat dengan partner.');
-          return;
-        }
-        // Jika user sedang menunggu, jangan dobel
-        if (waitingUsers.find(u => u.chatId === chatId)) {
-          bot.sendMessage(chatId, 'Kamu sudah dalam antrian mencari partner, tunggu ya...');
-          return;
-        }
-        matchUser(chatId);
-        break;
-
-      case '/end':
-        // Jika user dalam antrian, keluarkan dari antrian
-        removeWaitingUser(chatId);
-        // Jika user sedang aktif chat, akhiri sesi
-        if (activeChats[chatId]) {
-          endChat(chatId);
-        } else {
-          bot.sendMessage(chatId, 'Kamu tidak sedang dalam sesi chat.');
-        }
-        break;
-
-      case '/help':
-        showHelp(chatId);
-        break;
-
-      default:
-        bot.sendMessage(chatId, 'Perintah tidak dikenali. Ketik /help untuk daftar perintah.');
-        break;
+Gunakan tombol yang tersedia untuk navigasi.`);
     }
+    return;
+  }
+  
+  // Jika pesan bukan perintah, teruskan ke partner jika ada
+  if (activeChats[chatId]) {
+    const partnerId = activeChats[chatId];
+    bot.sendMessage(partnerId, text);
   } else {
-    // Jika pesan bukan perintah, cek apakah user sedang dalam chat aktif
-    if (activeChats[chatId]) {
-      const partnerId = activeChats[chatId];
-      // Teruskan pesan ke partner
-      bot.sendMessage(partnerId, text);
-    } else {
-      bot.sendMessage(chatId, 'Kamu belum berada dalam chat aktif. Gunakan /find untuk mencari partner anonim.');
-    }
+    bot.sendMessage(chatId, 'Gunakan tombol menu untuk memilih aksi.', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Cari Partner', callback_data: 'find_partner' }],
+          [{ text: 'Ubah Gender', callback_data: 'change_gender' }]
+        ]
+      }
+    });
   }
 });
 
