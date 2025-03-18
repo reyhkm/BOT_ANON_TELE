@@ -22,11 +22,11 @@ const app = express();
 app.use(bodyParser.json());
 
 // Struktur data in-memory
-let waitingUsers = []; // [{ chatId, gender }]
+let waitingUsers = []; // [{ chatId }]
 let activeChats = {};  // { chatId: partnerChatId }
 let userProfiles = {}; // { chatId: { gender: 'male'|'female' } }
 
-// Inline Keyboard Main Menu
+// Inline Keyboard Main Menu (semua opsi)
 const mainMenuKeyboard = {
   reply_markup: {
     inline_keyboard: [
@@ -35,7 +35,10 @@ const mainMenuKeyboard = {
         { text: 'Cari Partner', callback_data: 'menu_find' }
       ],
       [
-        { text: 'End Chat', callback_data: 'menu_end' },
+        { text: 'Next', callback_data: 'menu_next' },
+        { text: 'End Chat', callback_data: 'menu_end' }
+      ],
+      [
         { text: 'Help', callback_data: 'menu_help' }
       ]
     ]
@@ -60,7 +63,7 @@ function sendMainMenu(chatId) {
 `*AnonChat Bot*
 Selamat datang di Chat Bot Anonim!
 
-Kamu bisa menggunakan tombol di bawah ini atau mengetik perintah secara manual (misalnya: /setgender, /find, /end, /help).
+Kamu bisa menggunakan tombol di bawah ini atau perintah slash (misal: /setgender, /find, /next, /end, /help).
 
 Pilih aksi yang kamu inginkan:`;
   bot.sendMessage(chatId, menuMessage, { parse_mode: 'Markdown', ...mainMenuKeyboard });
@@ -76,7 +79,7 @@ function matchUser(chatId) {
   // Pastikan user tidak dobel di antrian
   removeWaitingUser(chatId);
 
-  // Jika tidak ada user yang menunggu, masukkan ke antrian
+  // Jika tidak ada user yang sedang menunggu, masukkan ke antrian
   if (waitingUsers.length === 0) {
     waitingUsers.push({ chatId });
     bot.sendMessage(chatId, 'Sedang mencari partner anonim untukmu, tunggu ya...');
@@ -94,18 +97,36 @@ function matchUser(chatId) {
   bot.sendMessage(partner.chatId, 'Partner ditemukan! Mulai ngobrol secara anonim.');
 }
 
-// Handler untuk mengakhiri sesi chat aktif
+// Handler untuk mengakhiri sesi chat aktif (untuk /end)
 function endChat(chatId) {
   const partnerId = activeChats[chatId];
   if (partnerId) {
-    // Hapus kedua user dari activeChats
     delete activeChats[chatId];
     delete activeChats[partnerId];
     
     bot.sendMessage(chatId, 'Chat dengan partner telah diakhiri.');
-    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru dengan /find atau melalui main menu.');
+    bot.sendMessage(partnerId, 'Partner telah mengakhiri chat. Kamu bisa cari partner baru dengan /find atau main menu.');
   } else {
     bot.sendMessage(chatId, 'Kamu belum berada dalam chat aktif.');
+  }
+}
+
+// Fungsi untuk fitur Next: mengakhiri chat aktif dan mencari partner baru
+function nextChat(chatId) {
+  if (waitingUsers.find(u => u.chatId === chatId)) {
+    bot.sendMessage(chatId, 'Kamu sedang dalam antrian mencari partner, tidak bisa ganti partner.');
+    return;
+  }
+  if (activeChats[chatId]) {
+    const partnerId = activeChats[chatId];
+    delete activeChats[chatId];
+    delete activeChats[partnerId];
+    bot.sendMessage(chatId, 'Mengakhiri chat dengan partner dan mencari partner baru...');
+    bot.sendMessage(partnerId, 'Partner kamu telah memilih untuk mencari partner baru.');
+    // Panggil fungsi pencarian partner untuk chatId
+    matchUser(chatId);
+  } else {
+    bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat aktif.');
   }
 }
 
@@ -118,6 +139,7 @@ Berikut perintah yang dapat kamu gunakan:
 • /start - Memulai bot dan menampilkan main menu  
 • /setgender [male|female] - Set gender kamu (atau klik tombol "Set Gender")  
 • /find - Cari partner chat anonim (atau klik tombol "Cari Partner")  
+• /next - Ganti partner chat aktif dengan yang baru (atau klik tombol "Next")  
 • /end - Akhiri sesi chat yang aktif (atau klik tombol "End Chat")  
 • /help - Tampilkan pesan bantuan
 
@@ -131,12 +153,11 @@ app.post(`/bot${TOKEN}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// Handler untuk pesan masuk melalui perintah / pesan teks
+// Handler untuk pesan masuk (perintah atau pesan teks)
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text ? msg.text.trim() : '';
 
-  // Jika pesan adalah perintah
   if (text.startsWith('/')) {
     const parts = text.split(' ');
     const command = parts[0].toLowerCase();
@@ -147,7 +168,6 @@ bot.on('message', (msg) => {
         break;
 
       case '/setgender':
-        // Jika gender diberikan sebagai parameter
         if (parts.length >= 2) {
           const gender = parts[1].toLowerCase();
           if (gender !== 'male' && gender !== 'female') {
@@ -158,7 +178,6 @@ bot.on('message', (msg) => {
           bot.sendMessage(chatId, `Gender kamu telah diset ke: ${gender}`);
           sendMainMenu(chatId);
         } else {
-          // Jika tidak, tampilkan pilihan gender
           bot.sendMessage(chatId, 'Pilih gender kamu:', genderKeyboard);
         }
         break;
@@ -188,6 +207,10 @@ bot.on('message', (msg) => {
         }
         break;
 
+      case '/next':
+        nextChat(chatId);
+        break;
+
       case '/help':
         showHelp(chatId);
         break;
@@ -197,7 +220,7 @@ bot.on('message', (msg) => {
         break;
     }
   } else {
-    // Jika pesan bukan perintah, cek apakah user sedang dalam chat aktif
+    // Pesan non-perintah: teruskan ke partner jika ada sesi aktif
     if (activeChats[chatId]) {
       const partnerId = activeChats[chatId];
       bot.sendMessage(partnerId, text);
@@ -215,7 +238,6 @@ bot.on('callback_query', (callbackQuery) => {
 
   if (action === 'menu_set_gender') {
     bot.answerCallbackQuery(callbackQuery.id);
-    // Tampilkan pilihan gender
     bot.sendMessage(chatId, 'Pilih gender kamu:', genderKeyboard);
   } else if (action === 'set_gender_male') {
     userProfiles[chatId] = { gender: 'male' };
@@ -241,6 +263,9 @@ bot.on('callback_query', (callbackQuery) => {
       bot.answerCallbackQuery(callbackQuery.id);
       matchUser(chatId);
     }
+  } else if (action === 'menu_next') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    nextChat(chatId);
   } else if (action === 'menu_end') {
     removeWaitingUser(chatId);
     if (activeChats[chatId]) {
