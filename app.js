@@ -37,14 +37,18 @@ const genderKeyboard = {
   }
 };
 
-// Fungsi untuk mengirim menu dinamis sesuai status user
 function sendDynamicMenu(chatId) {
-  // Jika gender belum diset, tampilkan menu _Set Gender_ dan _Help_
+  // Jika gender belum diset, tampilkan pesan dan menu Set Gender & Help
   if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
     const message = 
-`*AnonChat Bot*  
-Selamat datang di AnonChat Bot, diciptakan oleh hikam.  
-Untuk memulai pengalaman chat anonim yang seru dan aman, silakan atur gender kamu terlebih dahulu.`;
+`*RuangRahasia*
+Selamat datang di RuangRahasia, platform chat anonim dari hikam.
+Untuk mulai, atur gender kamu dengan klik tombol *Set Gender*.
+Setelah itu, pilih:
+• *Cari Partner* untuk obrolan anonim.
+• *Next* untuk ganti partner.
+• *End Chat* untuk mengakhiri sesi.
+• *Help* untuk panduan.`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
@@ -57,12 +61,15 @@ Untuk memulai pengalaman chat anonim yang seru dan aman, silakan atur gender kam
     return;
   }
 
-  // Jika gender sudah diset dan user sedang tidak dalam sesi aktif maupun antrian
+  // Jika gender sudah diset dan user tidak sedang chat atau menunggu
   if (!activeChats[chatId] && !waitingUsers.find(u => u.chatId === chatId)) {
     const message = 
-`*AnonChat Bot*  
-Gender kamu sudah diset ke *${userProfiles[chatId].gender}*.  
-Silakan pilih aksi yang ingin kamu lakukan:`;
+`*RuangRahasia*
+Gender kamu: *${userProfiles[chatId].gender}*.
+Pilih aksi:
+• *Cari Partner*
+• *Set Gender* (ubah)
+• *Help*`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
@@ -79,9 +86,12 @@ Silakan pilih aksi yang ingin kamu lakukan:`;
   // Jika user sedang dalam sesi chat aktif
   if (activeChats[chatId]) {
     const message = 
-`*AnonChat Bot*  
-Kamu sedang dalam sesi chat dengan partner.  
-Jika ingin ganti partner, klik *Next* atau akhiri chat dengan *End Chat*.`;
+`*RuangRahasia*
+Kamu sedang chat dengan partner.
+Pilih:
+• *Next* untuk ganti partner.
+• *End Chat* untuk akhiri sesi.
+• *Help* untuk panduan.`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
@@ -94,11 +104,11 @@ Jika ingin ganti partner, klik *Next* atau akhiri chat dengan *End Chat*.`;
     return;
   }
 
-  // Jika user sedang dalam antrian mencari partner
+  // Jika user sedang menunggu partner
   if (waitingUsers.find(u => u.chatId === chatId)) {
     const message = 
-`*AnonChat Bot*  
-Sedang mencari partner untukmu, silakan tunggu ya...`;
+`*RuangRahasia*
+Sedang mencari partner, tunggu ya...`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
