@@ -3,14 +3,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
 
-// Ambil token dan URL webhook dari environment variable
-const TOKEN = process.env.TELEGRAM_TOKEN;
-const WEBHOOK_URL = process.env.WEBHOOK_URL; // misal: https://nama-aplikasi.up.railway.app
-
-if (!TOKEN || !WEBHOOK_URL) {
-  console.error('Pastikan TELEGRAM_TOKEN dan WEBHOOK_URL sudah diset di environment.');
-  process.exit(1);
-}
+// Hardcode token dan URL webhook (ganti dengan nilai milikmu)
+const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
+const WEBHOOK_URL = 'https://your-app-url.railway.app';
 
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
