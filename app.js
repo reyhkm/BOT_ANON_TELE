@@ -7,7 +7,6 @@ const TelegramBot = require('node-telegram-bot-api');
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
 const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
 
-
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
 
@@ -37,6 +36,7 @@ const genderKeyboard = {
   }
 };
 
+// Fungsi untuk mengirim menu dinamis sesuai status user dengan informasi aktif user
 function sendDynamicMenu(chatId) {
   // Hitung statistik pengguna aktif
   const activeChatCount = Object.keys(activeChats).length / 2;
@@ -131,7 +131,6 @@ activeInfo +
   }
 }
 
-
 // Utilitas: hapus user dari antrian
 function removeWaitingUser(chatId) {
   waitingUsers = waitingUsers.filter(user => user.chatId !== chatId);
@@ -201,10 +200,40 @@ Perintah yang tersedia:
 • /find - Cari partner chat anonim (hanya tersedia jika gender sudah diset)  
 • /next - Ganti partner chat aktif dengan yang baru (jika sudah terhubung)  
 • /end - Akhiri sesi chat yang aktif  
+• /active - Lihat jumlah pengguna aktif  
 • /help - Tampilkan panduan penggunaan
 
 Kamu juga dapat menggunakan tombol di menu untuk navigasi.`;
   bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
+}
+
+// Fungsi untuk meneruskan pesan (teks dan berbagai media)
+function forwardMessage(chatId, partnerId, msg) {
+  if (msg.text) {
+    bot.sendMessage(partnerId, msg.text);
+  } else if (msg.photo) {
+    // Ambil foto dengan resolusi tertinggi
+    const photoArray = msg.photo;
+    const fileId = photoArray[photoArray.length - 1].file_id;
+    bot.sendPhoto(partnerId, fileId, { caption: msg.caption || '' });
+  } else if (msg.video) {
+    bot.sendVideo(partnerId, msg.video.file_id, { caption: msg.caption || '' });
+  } else if (msg.voice) {
+    bot.sendVoice(partnerId, msg.voice.file_id);
+  } else if (msg.audio) {
+    bot.sendAudio(partnerId, msg.audio.file_id, { caption: msg.caption || '' });
+  } else if (msg.animation) {
+    bot.sendAnimation(partnerId, msg.animation.file_id, { caption: msg.caption || '' });
+  } else if (msg.video_note) {
+    bot.sendVideoNote(partnerId, msg.video_note.file_id);
+  } else if (msg.document) {
+    bot.sendDocument(partnerId, msg.document.file_id, { caption: msg.caption || '' });
+  } else if (msg.sticker) {
+    bot.sendSticker(partnerId, msg.sticker.file_id);
+  } else {
+    // Fallback jika tipe pesan tidak dikenali
+    bot.sendMessage(partnerId, 'Tipe pesan ini tidak didukung untuk diteruskan.');
+  }
 }
 
 // Endpoint untuk menerima update dari webhook Telegram
@@ -213,13 +242,13 @@ app.post(`/bot${TOKEN}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// Handler untuk pesan masuk (perintah atau pesan teks)
+// Handler untuk pesan masuk (perintah atau pesan)
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
-  const text = msg.text ? msg.text.trim() : '';
-
-  if (text.startsWith('/')) {
-    const parts = text.split(' ');
+  
+  // Jika pesan merupakan perintah (dimulai dengan '/')
+  if (msg.text && msg.text.trim().startsWith('/')) {
+    const parts = msg.text.trim().split(' ');
     const command = parts[0].toLowerCase();
 
     switch (command) {
@@ -271,6 +300,10 @@ bot.on('message', (msg) => {
         nextChat(chatId);
         break;
 
+      case '/active':
+        showHelp(chatId); // Atau kamu bisa langsung memanggil showActiveUsers(chatId);
+        break;
+
       case '/help':
         showHelp(chatId);
         break;
@@ -280,10 +313,10 @@ bot.on('message', (msg) => {
         break;
     }
   } else {
-    // Pesan non-perintah: teruskan ke partner jika ada sesi aktif
+    // Pesan non-perintah: jika ada sesi aktif, teruskan pesan (baik teks maupun media)
     if (activeChats[chatId]) {
       const partnerId = activeChats[chatId];
-      bot.sendMessage(partnerId, text);
+      forwardMessage(chatId, partnerId, msg);
     } else {
       bot.sendMessage(chatId, 'Kamu belum berada dalam sesi chat. Silakan cari partner melalui menu atau dengan /find.');
     }
