@@ -23,6 +23,68 @@ app.use(bodyParser.json());
 let waitingUsers = []; // [{ chatId }]
 let activeChats = {};  // { chatId: partnerChatId }
 let userProfiles = {}; // { chatId: { gender: 'male'|'female' } }
+let replyMapping = {}; // { "<chatId>:<messageId>": { chatId, messageId } }
+
+// Helper untuk menyimpan mapping reply dua arah
+function storeReplyMapping(fromChatId, fromMessageId, toChatId, toMessageId) {
+  replyMapping[`${fromChatId}:${fromMessageId}`] = { chatId: toChatId, messageId: toMessageId };
+  replyMapping[`${toChatId}:${toMessageId}`] = { chatId: fromChatId, messageId: fromMessageId };
+}
+
+// Fungsi untuk meneruskan pesan (teks & media) dengan dukungan reply
+function forwardMessage(chatId, partnerId, msg) {
+  // Cek apakah pesan merupakan reply dan coba temukan mapping
+  let replyToOption = {};
+  if (msg.reply_to_message && replyMapping[`${chatId}:${msg.reply_to_message.message_id}`]) {
+    const mapping = replyMapping[`${chatId}:${msg.reply_to_message.message_id}`];
+    if (mapping && mapping.chatId === partnerId) {
+      replyToOption.reply_to_message_id = mapping.messageId;
+    }
+  }
+  
+  if (msg.text) {
+    bot.sendMessage(partnerId, msg.text, replyToOption).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.photo) {
+    // Ambil foto dengan resolusi tertinggi
+    const photoArray = msg.photo;
+    const fileId = photoArray[photoArray.length - 1].file_id;
+    bot.sendPhoto(partnerId, fileId, { caption: msg.caption || '', ...replyToOption }).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.video) {
+    bot.sendVideo(partnerId, msg.video.file_id, { caption: msg.caption || '', ...replyToOption }).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.voice) {
+    bot.sendVoice(partnerId, msg.voice.file_id, replyToOption).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.audio) {
+    bot.sendAudio(partnerId, msg.audio.file_id, { caption: msg.caption || '', ...replyToOption }).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.animation) {
+    bot.sendAnimation(partnerId, msg.animation.file_id, { caption: msg.caption || '', ...replyToOption }).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.video_note) {
+    bot.sendVideoNote(partnerId, msg.video_note.file_id, replyToOption).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.document) {
+    bot.sendDocument(partnerId, msg.document.file_id, { caption: msg.caption || '', ...replyToOption }).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else if (msg.sticker) {
+    bot.sendSticker(partnerId, msg.sticker.file_id, replyToOption).then((sentMsg) => {
+      storeReplyMapping(chatId, msg.message_id, partnerId, sentMsg.message_id);
+    });
+  } else {
+    bot.sendMessage(partnerId, 'Tipe pesan ini tidak didukung untuk diteruskan.', replyToOption);
+  }
+}
 
 // Inline Keyboard untuk pemilihan Gender
 const genderKeyboard = {
@@ -36,7 +98,7 @@ const genderKeyboard = {
   }
 };
 
-// Fungsi untuk mengirim menu dinamis sesuai status user dengan informasi aktif user
+// Fungsi untuk mengirim menu dinamis beserta info aktif user
 function sendDynamicMenu(chatId) {
   // Hitung statistik pengguna aktif
   const activeChatCount = Object.keys(activeChats).length / 2;
@@ -207,33 +269,17 @@ Kamu juga dapat menggunakan tombol di menu untuk navigasi.`;
   bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
 }
 
-// Fungsi untuk meneruskan pesan (teks dan berbagai media)
-function forwardMessage(chatId, partnerId, msg) {
-  if (msg.text) {
-    bot.sendMessage(partnerId, msg.text);
-  } else if (msg.photo) {
-    // Ambil foto dengan resolusi tertinggi
-    const photoArray = msg.photo;
-    const fileId = photoArray[photoArray.length - 1].file_id;
-    bot.sendPhoto(partnerId, fileId, { caption: msg.caption || '' });
-  } else if (msg.video) {
-    bot.sendVideo(partnerId, msg.video.file_id, { caption: msg.caption || '' });
-  } else if (msg.voice) {
-    bot.sendVoice(partnerId, msg.voice.file_id);
-  } else if (msg.audio) {
-    bot.sendAudio(partnerId, msg.audio.file_id, { caption: msg.caption || '' });
-  } else if (msg.animation) {
-    bot.sendAnimation(partnerId, msg.animation.file_id, { caption: msg.caption || '' });
-  } else if (msg.video_note) {
-    bot.sendVideoNote(partnerId, msg.video_note.file_id);
-  } else if (msg.document) {
-    bot.sendDocument(partnerId, msg.document.file_id, { caption: msg.caption || '' });
-  } else if (msg.sticker) {
-    bot.sendSticker(partnerId, msg.sticker.file_id);
-  } else {
-    // Fallback jika tipe pesan tidak dikenali
-    bot.sendMessage(partnerId, 'Tipe pesan ini tidak didukung untuk diteruskan.');
-  }
+// Fungsi untuk menampilkan jumlah pengguna aktif (jika dibutuhkan lewat perintah /active)
+function showActiveUsers(chatId) {
+  const activeChatCount = Object.keys(activeChats).length / 2;
+  const waitingCount = waitingUsers.length;
+  const totalActive = activeChatCount + waitingCount;
+  const msgText =
+`*RuangRahasia*\n\nPengguna aktif:
+• Dalam sesi chat: *${activeChatCount}*
+• Dalam antrian: *${waitingCount}*
+• Total: *${totalActive}*`;
+  bot.sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
 }
 
 // Endpoint untuk menerima update dari webhook Telegram
@@ -301,7 +347,7 @@ bot.on('message', (msg) => {
         break;
 
       case '/active':
-        showHelp(chatId); // Atau kamu bisa langsung memanggil showActiveUsers(chatId);
+        showActiveUsers(chatId);
         break;
 
       case '/help':
@@ -313,7 +359,7 @@ bot.on('message', (msg) => {
         break;
     }
   } else {
-    // Pesan non-perintah: jika ada sesi aktif, teruskan pesan (baik teks maupun media)
+    // Pesan non-perintah: jika ada sesi aktif, teruskan pesan (dengan reply mapping)
     if (activeChats[chatId]) {
       const partnerId = activeChats[chatId];
       forwardMessage(chatId, partnerId, msg);
