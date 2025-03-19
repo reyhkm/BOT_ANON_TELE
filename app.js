@@ -38,15 +38,22 @@ const genderKeyboard = {
 };
 
 function sendDynamicMenu(chatId) {
+  // Hitung statistik pengguna aktif
+  const activeChatCount = Object.keys(activeChats).length / 2;
+  const waitingCount = waitingUsers.length;
+  const totalActive = activeChatCount + waitingCount;
+  const activeInfo = `Pengguna aktif: *${totalActive}* (Chat: *${activeChatCount}*, Antrian: *${waitingCount}*)\n\n`;
+
   // Jika gender belum diset, tampilkan pesan dan menu Set Gender & Help
   if (!userProfiles[chatId] || !userProfiles[chatId].gender) {
     const message = 
+activeInfo +
 `Selamat datang di *RuangRahasia*
 Platform chat anonim dari *hikam* :)
 
 Silahkan atur gender kamu dengan klik tombol *Set Gender*.
 
-Setelah itu, pilih:
+Setelah itu, kamu dapat:
 • *Cari Partner* untuk obrolan anonim.
 • *Next* untuk ganti partner.
 • *End Chat* untuk mengakhiri sesi.
@@ -66,6 +73,7 @@ Setelah itu, pilih:
   // Jika gender sudah diset dan user tidak sedang chat atau menunggu
   if (!activeChats[chatId] && !waitingUsers.find(u => u.chatId === chatId)) {
     const message = 
+activeInfo +
 `Gender kamu: *${userProfiles[chatId].gender}*.
 
 Pilih aksi:
@@ -75,8 +83,7 @@ Pilih aksi:
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Cari Partner', callback_data: 'menu_find' }],
-          [{ text: 'Set Gender', callback_data: 'menu_set_gender' }],
+          [{ text: 'Cari Partner', callback_data: 'menu_find' }, { text: 'Set Gender', callback_data: 'menu_set_gender' }],
           [{ text: 'Help', callback_data: 'menu_help' }]
         ]
       }
@@ -88,6 +95,7 @@ Pilih aksi:
   // Jika user sedang dalam sesi chat aktif
   if (activeChats[chatId]) {
     const message = 
+activeInfo +
 `Kamu sedang chat dengan partner.
 
 Pilih:
@@ -106,11 +114,11 @@ Pilih:
     return;
   }
 
-  // Jika user sedang menunggu partner
+  // Jika user sedang dalam antrian mencari partner
   if (waitingUsers.find(u => u.chatId === chatId)) {
     const message = 
-`*RuangRahasia*
-Sedang mencari partner, tunggu ya...`;
+activeInfo +
+`Sedang mencari partner, tunggu ya...`;
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
@@ -122,6 +130,7 @@ Sedang mencari partner, tunggu ya...`;
     return;
   }
 }
+
 
 // Utilitas: hapus user dari antrian
 function removeWaitingUser(chatId) {
