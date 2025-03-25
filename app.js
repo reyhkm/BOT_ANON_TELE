@@ -81,13 +81,16 @@ async function processGroupMessage(msg) {
       return;
     }
 
-    try {
-      const result = await translate(cleanedText, { from: pref.from, to: pref.to });
-      bot.sendMessage(chatId, `\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
-    } catch (err) {
-      console.error('Error saat menerjemahkan:', err);
-      bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
-    }
+try {
+  const result = await translate(cleanedText, { from: pref.from, to: pref.to });
+  // Hapus kata "ترجمة" dari hasil terjemahan (case-sensitive atau insensitive sesuai kebutuhan)
+  const cleanedResult = result.text.replace(/\bترجمة\b/gi, '').trim();
+  bot.sendMessage(chatId, `*Terjemahan:*\n${cleanedResult}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+} catch (err) {
+  console.error('Error saat menerjemahkan:', err);
+  bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
+}
+
     return;
   }
 
