@@ -20,6 +20,6 @@
   "dependencies": {
     "express": "^4.18.2",
     "node-telegram-bot-api": "^0.57.0",
-    "@vitalets/google-translate-api": "^8.0.0"
+    "@iamtraction/google-translate": "^2.0.1"
   }
 }
