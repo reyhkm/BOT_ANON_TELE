@@ -18,29 +18,29 @@ const app = express();
 app.use(bodyParser.json());
 
 // Data structure to store user language preferences
-// Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
+// Format: { [chatId]: { from: 'id'|'fa', to: 'fa'|'id' } }
 let userLanguagePairs = {};
 
 // Utility: Map language aliases to ISO 639-1 codes
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
-    arab: 'ar'
+    farsi: 'fa'
   };
   return mapping[lang.toLowerCase()];
 }
 
 // Handler for /setlang command
-// Example: /setlang indo arab  (translate from Indonesian to Arabic)
+// Example: /setlang indo farsi  (translate from Indonesian to Farsi)
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
-    bot.sendMessage(chatId, 'Invalid format. Use: /setlang <source> <target>\nExample: /setlang indo arab');
+    bot.sendMessage(chatId, 'Invalid format. Use: /setlang <source> <target>\nExample: /setlang indo farsi');
     return;
   }
   const fromLang = mapLanguage(parts[1]);
   const toLang = mapLanguage(parts[2]);
   if (!fromLang || !toLang) {
-    bot.sendMessage(chatId, 'Supported languages are only: indo and arab.');
+    bot.sendMessage(chatId, 'Supported languages are only: indo and farsi.');
     return;
   }
   if (fromLang === toLang) {
