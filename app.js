@@ -17,8 +17,8 @@ bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
 const app = express();
 app.use(bodyParser.json());
 
-// Data structure to store user language preferences
-// Format: { [chatId]: { from: 'id'|'fa', to: 'fa'|'id' } }
+// Data structure to store language preferences per user
+// Format: { [userId]: { from: 'id'|'fa', to: 'fa'|'id' } }
 let userLanguagePairs = {};
 
 // Utility: Map language aliases to ISO 639-1 codes
@@ -32,23 +32,31 @@ function mapLanguage(lang) {
 
 // Handler for /setlang command
 // Example: /setlang indo farsi  (translate from Indonesian to Farsi)
-function handleSetLangCommand(chatId, parts) {
+function handleSetLangCommand(msg, parts) {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  
   if (parts.length < 3) {
     bot.sendMessage(chatId, 'Invalid format. Use: /setlang <source> <target>\nExample: /setlang indo farsi');
     return;
   }
+  
   const fromLang = mapLanguage(parts[1]);
   const toLang = mapLanguage(parts[2]);
+  
   if (!fromLang || !toLang) {
     bot.sendMessage(chatId, 'Supported languages are only: indo and farsi.');
     return;
   }
+  
   if (fromLang === toLang) {
     bot.sendMessage(chatId, 'Source and target languages must not be the same.');
     return;
   }
-  userLanguagePairs[chatId] = { from: fromLang, to: toLang };
-  bot.sendMessage(chatId, `Language preference saved.\nYour messages will be translated from *${parts[1]}* to *${parts[2]}*.`, { parse_mode: 'Markdown' });
+  
+  // Simpan preferensi untuk user tertentu (berdasarkan userId)
+  userLanguagePairs[userId] = { from: fromLang, to: toLang };
+  bot.sendMessage(chatId, `Language preference saved for you.\nYour messages will be translated from *${parts[1]}* to *${parts[2]}*.`, { parse_mode: 'Markdown' });
 }
 
 // Main function to process text messages from the group
@@ -56,30 +64,28 @@ async function processGroupMessage(msg) {
   const chatId = msg.chat.id;
   const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
+  const userId = msg.from.id;
 
   if (!text) return;
 
   // If the message is a /setlang command, process it first
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
-    handleSetLangCommand(chatId, parts);
+    handleSetLangCommand(msg, parts);
     return;
   }
 
   // Optional: Ignore messages that are other commands (start with "/")
   if (text.startsWith('/')) return;
 
-  // If the user has set language preferences, translate the message directly
-  const pref = userLanguagePairs[chatId];
+  // Jika user telah mengatur preferensi bahasa, langsung terjemahkan pesan
+  const pref = userLanguagePairs[userId];
   if (pref) {
     try {
       // The @iamtraction/google-translate library automatically handles autocorrect and spelling correction
       const result = await translate(text, { from: pref.from, to: pref.to });
       
-      // Example: If you want to display autocorrect information, you can check the following properties:
-      // result.from.autoCorrected -> boolean
-      // result.from.text.value -> string that has been corrected (if available)
-      
+      // Send the translated text in the group chat
       bot.sendMessage(chatId, `${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
     } catch (err) {
       console.error('Error while translating:', err);
