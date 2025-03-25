@@ -17,11 +17,11 @@ bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
 const app = express();
 app.use(bodyParser.json());
 
-// Struktur data untuk menyimpan preferensi bahasa per user
+// Struktur data untuk preferensi bahasa per user
 // Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
 let userLanguagePairs = {};
 
-// Fungsi utilitas untuk memetakan alias bahasa ke kode
+// Utility: Mapping bahasa dari alias ke kode
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
@@ -30,8 +30,8 @@ function mapLanguage(lang) {
   return mapping[lang.toLowerCase()];
 }
 
-// Handler untuk perintah /setlang
-// Contoh penggunaan: /setlang indo arab
+// Handler perintah /setlang
+// Contoh: /setlang indo arab   (artinya terjemahkan dari Bahasa Indonesia ke Arab)
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
     bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
@@ -48,10 +48,14 @@ function handleSetLangCommand(chatId, parts) {
     return;
   }
   userLanguagePairs[chatId] = { from: fromLang, to: toLang };
-  bot.sendMessage(chatId, `Preferensi bahasa berhasil disimpan.\nPesan kamu akan diterjemahkan dari *${parts[1]}* ke *${parts[2]}*.`, { parse_mode: 'Markdown' });
+  bot.sendMessage(
+    chatId,
+    `Preferensi bahasa berhasil disimpan.\nPesan kamu akan diterjemahkan dari *${parts[1]}* ke *${parts[2]}*.`,
+    { parse_mode: 'Markdown' }
+  );
 }
 
-// Fungsi utama untuk memproses pesan teks dari grup
+// Fungsi utama untuk memproses pesan grup
 async function processGroupMessage(msg) {
   const chatId = msg.chat.id;
   const originalMessageId = msg.message_id;
@@ -59,27 +63,33 @@ async function processGroupMessage(msg) {
 
   if (!text) return;
 
-  // Jika pesan adalah perintah /setlang, proses terlebih dahulu
+  // Jika perintah /setlang, proses perintah ini secara khusus
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Opsional: Abaikan pesan yang merupakan perintah lain (diawali dengan "/")
-  if (text.startsWith('/')) return;
-
-  // Jika pengguna sudah mengatur preferensi bahasa, langsung terjemahkan pesan
+  // Jika preferensi bahasa sudah diatur, terjemahkan otomatis setiap pesan
   const pref = userLanguagePairs[chatId];
   if (pref) {
     try {
       const result = await translate(text, { from: pref.from, to: pref.to });
-      bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+      bot.sendMessage(
+        chatId,
+        `*Terjemahan:*\n${result.text}`,
+        { parse_mode: 'Markdown', reply_to_message_id: originalMessageId }
+      );
     } catch (err) {
       console.error('Error saat menerjemahkan:', err);
-      bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
+      bot.sendMessage(
+        chatId,
+        'Terjadi kesalahan saat menerjemahkan pesan.',
+        { reply_to_message_id: originalMessageId }
+      );
     }
   }
+  // Jika preferensi belum diatur, tidak melakukan apa-apa
 }
 
 // Endpoint untuk menerima update dari webhook Telegram
