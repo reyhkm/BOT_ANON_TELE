@@ -31,7 +31,7 @@ function mapLanguage(lang) {
 }
 
 // Handler perintah /setlang
-// Contoh: /setlang indo arab   (artinya terjemahkan dari Bahasa Indonesia ke Arab)
+// Contoh: /setlang indo arab   (artinya: pesan akan diterjemahkan dari Bahasa Indonesia ke Arab)
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
     bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
@@ -56,40 +56,45 @@ function handleSetLangCommand(chatId, parts) {
 }
 
 // Fungsi utama untuk memproses pesan
-async function processGroupMessage(msg) {
+async function processMessage(msg) {
   const chatId = msg.chat.id;
-  const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
   if (!text) return;
 
-  // Jika pesan adalah perintah /setlang, proses perintah tersebut
+  // Proses perintah /setlang
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Cek apakah pengguna sudah mengatur preferensi bahasa
-  const pref = userLanguagePairs[chatId];
-  if (!pref) {
-    // Jika belum, tidak melakukan apa-apa (atau bisa mengingatkan untuk setlang)
+  // Jika pesan merupakan perintah lain (misal /help), kita bisa mengabaikannya
+  if (text.startsWith('/')) {
+    // Untuk perintah lain, kita tidak menerjemahkan agar tidak mengganggu alur perintah.
     return;
   }
 
-  // Lakukan terjemahan otomatis untuk pesan apapun
+  // Cek apakah user sudah mengatur preferensi bahasa
+  const pref = userLanguagePairs[chatId];
+  if (!pref) {
+    // Jika belum, tidak melakukan apa-apa atau bisa dikasih notifikasi (opsional)
+    return;
+  }
+
+  // Lakukan terjemahan otomatis untuk pesan yang diterima
   try {
     const result = await translate(text, { from: pref.from, to: pref.to });
+    // Kirim hasil terjemahan sebagai pesan baru di chat
     bot.sendMessage(
       chatId,
       `*Terjemahan:*\n${result.text}`,
-      { parse_mode: 'Markdown', reply_to_message_id: originalMessageId }
+      { parse_mode: 'Markdown' }
     );
   } catch (err) {
     console.error('Error saat menerjemahkan:', err);
     bot.sendMessage(
       chatId,
-      'Terjadi kesalahan saat menerjemahkan pesan.',
-      { reply_to_message_id: originalMessageId }
+      'Terjadi kesalahan saat menerjemahkan pesan.'
     );
   }
 }
@@ -102,8 +107,9 @@ app.post(`/bot${TOKEN}`, (req, res) => {
 
 // Handler pesan masuk
 bot.on('message', (msg) => {
+  // Proses hanya pesan teks
   if (msg.text) {
-    processGroupMessage(msg);
+    processMessage(msg);
   }
 });
 
