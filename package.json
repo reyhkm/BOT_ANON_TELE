@@ -1,7 +1,7 @@
 {
   "name": "telegram-anon-bot",
   "version": "1.0.0",
-  "description": "Telegram bot untuk chat anonim dengan fitur set gender, matching partner, dan auto translate, menggunakan Node.js dan Express",
+  "description": "Telegram bot untuk chat anonim dengan fitur set gender, matching partner, dan auto translate menggunakan API Google Translate, Node.js dan Express",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
