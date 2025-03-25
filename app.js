@@ -8,7 +8,7 @@ const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
 const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
 
 // Set nama user bot (sesuaikan dengan username bot-mu)
-const BOT_MENTION = '@seraAI_bot';
+const BOT_MENTION = '@percakapanseru_bot ';
 
 // Inisialisasi bot dengan mode webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
