@@ -83,7 +83,7 @@ async function processGroupMessage(msg) {
 
     try {
       const result = await translate(cleanedText, { from: pref.from, to: pref.to });
-      bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+      bot.sendMessage(chatId, `\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
     } catch (err) {
       console.error('Error saat menerjemahkan:', err);
       bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
