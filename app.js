@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
-const translate = require('@iamtraction/google-translate');
+const axios = require('axios');
 
 // Configure token and webhook
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
@@ -54,9 +54,36 @@ function handleSetLangCommand(msg, parts) {
     return;
   }
   
-  // Simpan preferensi untuk user tertentu (berdasarkan userId)
+  // Save language preference for the specific user
   userLanguagePairs[userId] = { from: fromLang, to: toLang };
   bot.sendMessage(chatId, `Language preference saved for you.\nYour messages will be translated from *${parts[1]}* to *${parts[2]}*.`, { parse_mode: 'Markdown' });
+}
+
+// Custom translate function using the discovered API endpoint
+async function customTranslate(text, from, to) {
+  const url = 'https://translate-pa.googleapis.com/v1/translateHtml';
+  // API Key found on forum (gunakan dengan hati-hati)
+  const apiKey = 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520';
+  
+  // Request body sesuai format yang ditemukan:
+  // [[["Text to translate"], "auto", "en"], "wt_lib"]
+  // Namun kita gunakan parameter 'from' dan 'to' yang sudah diatur
+  const requestBody = JSON.stringify([[[text], from, to], "wt_lib"]);
+  
+  try {
+    const response = await axios.post(url, requestBody, {
+      headers: {
+        'Content-Type': 'application/json+protobuf',
+        'X-Goog-API-Key': apiKey
+      }
+    });
+    // Response expected format: [[translatedText], [detectedLanguage]]
+    // Ambil translatedText dari response.data[0][0]
+    return response.data[0][0];
+  } catch (err) {
+    console.error("Translation error:", err);
+    throw err;
+  }
 }
 
 // Main function to process text messages from the group
@@ -75,20 +102,16 @@ async function processGroupMessage(msg) {
     return;
   }
 
-  // Optional: Ignore messages that are other commands (start with "/")
+  // Optional: Ignore other commands (starting with "/")
   if (text.startsWith('/')) return;
 
-  // Jika user telah mengatur preferensi bahasa, langsung terjemahkan pesan
+  // If user has set language preferences, translate the message automatically
   const pref = userLanguagePairs[userId];
   if (pref) {
     try {
-      // The @iamtraction/google-translate library automatically handles autocorrect and spelling correction
-      const result = await translate(text, { from: pref.from, to: pref.to });
-      
-      // Send the translated text in the group chat
-      bot.sendMessage(chatId, `${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+      const translatedText = await customTranslate(text, pref.from, pref.to);
+      bot.sendMessage(chatId, `${translatedText}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
     } catch (err) {
-      console.error('Error while translating:', err);
       bot.sendMessage(chatId, 'An error occurred while translating the message.', { reply_to_message_id: originalMessageId });
     }
   }
