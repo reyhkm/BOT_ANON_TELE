@@ -66,33 +66,38 @@ async function processGroupMessage(msg) {
     return;
   }
 
-  // Jika pesan diawali dengan "/" (selain /setlang), anggap sebagai perintah auto-translate
-  if (text.startsWith('/')) {
-    // Hapus karakter "/" awal untuk mendapatkan teks yang akan diterjemahkan
-    const cleanedText = text.substring(1).trim();
-    if (!cleanedText) {
-      bot.sendMessage(chatId, 'Tidak ada teks untuk diterjemahkan.', { reply_to_message_id: originalMessageId });
-      return;
-    }
-
-    const pref = userLanguagePairs[chatId];
-    if (!pref) {
-      bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab', { reply_to_message_id: originalMessageId });
-      return;
-    }
-
-try {
-  const result = await translate(cleanedText, { from: pref.from, to: pref.to });
-  // Hapus kata "ترجمة" dari hasil terjemahan (case-sensitive atau insensitive sesuai kebutuhan)
-  const cleanedResult = result.text.replace(/\bترجمة\b/gi, '').trim();
-  bot.sendMessage(chatId, `*Terjemahan:*\n${cleanedResult}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
-} catch (err) {
-  console.error('Error saat menerjemahkan:', err);
-  bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
-}
-
+// Jika pesan diawali dengan "/" (selain /setlang), anggap sebagai perintah auto-translate
+if (text.startsWith('/')) {
+  // Jika pesan dimulai dengan "/translate", hapus kata tersebut
+  let cleanedText = text;
+  if (cleanedText.toLowerCase().startsWith('/translate')) {
+    cleanedText = cleanedText.substring('/translate'.length).trim();
+  } else {
+    // Jika bukan /translate, hapus karakter "/" awal
+    cleanedText = cleanedText.substring(1).trim();
+  }
+  
+  if (!cleanedText) {
+    bot.sendMessage(chatId, 'Tidak ada teks untuk diterjemahkan.', { reply_to_message_id: originalMessageId });
     return;
   }
+
+  const pref = userLanguagePairs[chatId];
+  if (!pref) {
+    bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab', { reply_to_message_id: originalMessageId });
+    return;
+  }
+
+  try {
+    const result = await translate(cleanedText, { from: pref.from, to: pref.to });
+    bot.sendMessage(chatId, `\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+  } catch (err) {
+    console.error('Error saat menerjemahkan:', err);
+    bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
+  }
+  return;
+}
+
 
   // Jika pesan tidak diawali dengan "/", abaikan atau tambahkan logika lain sesuai kebutuhan
 }
