@@ -17,11 +17,11 @@ bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
 const app = express();
 app.use(bodyParser.json());
 
-// Struktur data untuk preferensi bahasa per user
+// Struktur data untuk preferensi bahasa per user (berdasarkan chatId)
 // Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
 let userLanguagePairs = {};
 
-// Utility: Mapping bahasa dari alias ke kode
+// Utility: Mapping alias bahasa ke kode yang sesuai
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
@@ -31,7 +31,7 @@ function mapLanguage(lang) {
 }
 
 // Handler perintah /setlang
-// Contoh: /setlang indo arab   (artinya terjemahkan dari Bahasa Indonesia ke Arab)
+// Contoh: /setlang indo arab  => artinya pesan akan diterjemahkan dari bahasa Indonesia ke Arab
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
     bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
@@ -47,6 +47,7 @@ function handleSetLangCommand(chatId, parts) {
     bot.sendMessage(chatId, 'Bahasa asal dan tujuan tidak boleh sama.');
     return;
   }
+  // Simpan preferensi pengguna berdasarkan chatId
   userLanguagePairs[chatId] = { from: fromLang, to: toLang };
   bot.sendMessage(
     chatId,
@@ -55,41 +56,37 @@ function handleSetLangCommand(chatId, parts) {
   );
 }
 
-// Fungsi utama untuk memproses pesan grup
+// Fungsi utama untuk memproses pesan di grup secara otomatis menerjemahkan setiap pesan
 async function processGroupMessage(msg) {
   const chatId = msg.chat.id;
-  const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
 
   if (!text) return;
 
-  // Jika perintah /setlang, proses perintah ini secara khusus
+  // Jika perintah /setlang, proses secara khusus tanpa menerjemahkan pesan lainnya
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Jika preferensi bahasa sudah diatur, terjemahkan otomatis setiap pesan
+  // Periksa apakah preferensi bahasa sudah diatur untuk chat ini
   const pref = userLanguagePairs[chatId];
-  if (pref) {
-    try {
-      const result = await translate(text, { from: pref.from, to: pref.to });
-      bot.sendMessage(
-        chatId,
-        `*Terjemahan:*\n${result.text}`,
-        { parse_mode: 'Markdown', reply_to_message_id: originalMessageId }
-      );
-    } catch (err) {
-      console.error('Error saat menerjemahkan:', err);
-      bot.sendMessage(
-        chatId,
-        'Terjadi kesalahan saat menerjemahkan pesan.',
-        { reply_to_message_id: originalMessageId }
-      );
-    }
+  if (!pref) {
+    // Jika belum disetting, dapat mengirim pesan peringatan
+    // Jika tidak diinginkan, cukup return (tidak mengirim pesan apapun)
+    // bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
+    return;
   }
-  // Jika preferensi belum diatur, tidak melakukan apa-apa
+
+  try {
+    // Terjemahkan setiap pesan otomatis tanpa reply ke pesan asli
+    const result = await translate(text, { from: pref.from, to: pref.to });
+    bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown' });
+  } catch (err) {
+    console.error('Error saat menerjemahkan:', err);
+    bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.');
+  }
 }
 
 // Endpoint untuk menerima update dari webhook Telegram
@@ -98,7 +95,7 @@ app.post(`/bot${TOKEN}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// Handler pesan masuk
+// Handler untuk setiap pesan masuk
 bot.on('message', (msg) => {
   if (msg.text) {
     processGroupMessage(msg);
