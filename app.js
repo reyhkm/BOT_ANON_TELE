@@ -6,7 +6,6 @@ const translate = require('@vitalets/google-translate-api');
 // Konfigurasi token dan webhook
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
 const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
-const BOT_MENTION = '@percakapanseru_bot'; // Ganti dengan username bot kamu
 
 // Inisialisasi bot dengan webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
@@ -22,7 +21,7 @@ app.use(bodyParser.json());
 // Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
 let userLanguagePairs = {};
 
-// Utility: Mapping bahasa
+// Utility: Mapping bahasa dari alias ke kode
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
@@ -58,39 +57,30 @@ async function processGroupMessage(msg) {
   const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
 
-  // Pastikan ada teks
   if (!text) return;
 
-  // Jika perintah /setlang, proses saja
+  // Perintah /setlang harus diproses terlebih dahulu
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Jika perintah lain, bisa ditambahkan atau diabaikan
+  // Jika pesan diawali dengan "/" (selain /setlang), anggap sebagai perintah auto-translate
   if (text.startsWith('/')) {
-    bot.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /setlang untuk mengatur preferensi bahasa.');
-    return;
-  }
-
-  // Proses auto translate bila pesan menyebut bot
-  if (text.includes(BOT_MENTION)) {
-    // Hapus mention bot dari teks
-    const cleanedText = text.replace(BOT_MENTION, '').trim();
+    // Hapus karakter "/" awal untuk mendapatkan teks yang akan diterjemahkan
+    const cleanedText = text.substring(1).trim();
     if (!cleanedText) {
       bot.sendMessage(chatId, 'Tidak ada teks untuk diterjemahkan.', { reply_to_message_id: originalMessageId });
       return;
     }
 
-    // Cek apakah preferensi bahasa sudah diatur
     const pref = userLanguagePairs[chatId];
     if (!pref) {
       bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab', { reply_to_message_id: originalMessageId });
       return;
     }
 
-    // Lakukan terjemahan
     try {
       const result = await translate(cleanedText, { from: pref.from, to: pref.to });
       bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
@@ -98,7 +88,10 @@ async function processGroupMessage(msg) {
       console.error('Error saat menerjemahkan:', err);
       bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
     }
+    return;
   }
+
+  // Jika pesan tidak diawali dengan "/", abaikan atau tambahkan logika lain sesuai kebutuhan
 }
 
 // Endpoint untuk menerima update dari webhook Telegram
@@ -109,7 +102,6 @@ app.post(`/bot${TOKEN}`, (req, res) => {
 
 // Handler pesan masuk
 bot.on('message', (msg) => {
-  // Proses hanya pesan teks
   if (msg.text) {
     processGroupMessage(msg);
   }
