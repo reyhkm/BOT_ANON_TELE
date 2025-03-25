@@ -17,33 +17,30 @@ bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
 const app = express();
 app.use(bodyParser.json());
 
-// Struktur data untuk preferensi bahasa per user
-// Format: { [chatId]: { from: 'id'|'en'|'ar', to: 'id'|'en'|'ar' } }
-// Di sini misalnya kita mendukung minimal bahasa Inggris, Indonesia, dan Arab
+// Struktur data untuk menyimpan preferensi bahasa per user
+// Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
 let userLanguagePairs = {};
 
-// Utility: Mapping alias bahasa ke kode
+// Fungsi utilitas untuk memetakan alias bahasa ke kode
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
-    arab: 'ar',
-    english: 'en',
-    inggris: 'en'
+    arab: 'ar'
   };
   return mapping[lang.toLowerCase()];
 }
 
-// Handler perintah /setlang
-// Contoh: /setlang english indo (artinya terjemahkan dari bahasa Inggris ke Indonesia)
+// Handler untuk perintah /setlang
+// Contoh penggunaan: /setlang indo arab
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
-    bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang english indo');
+    bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
     return;
   }
   const fromLang = mapLanguage(parts[1]);
   const toLang = mapLanguage(parts[2]);
   if (!fromLang || !toLang) {
-    bot.sendMessage(chatId, 'Bahasa yang didukung: indo, arab, english.');
+    bot.sendMessage(chatId, 'Bahasa yang didukung hanya: indo dan arab.');
     return;
   }
   if (fromLang === toLang) {
@@ -51,48 +48,37 @@ function handleSetLangCommand(chatId, parts) {
     return;
   }
   userLanguagePairs[chatId] = { from: fromLang, to: toLang };
-  bot.sendMessage(
-    chatId,
-    `Preferensi bahasa berhasil disimpan.\nPesan kamu akan diterjemahkan dari *${parts[1]}* ke *${parts[2]}*.`,
-    { parse_mode: 'Markdown' }
-  );
+  bot.sendMessage(chatId, `Preferensi bahasa berhasil disimpan.\nPesan kamu akan diterjemahkan dari *${parts[1]}* ke *${parts[2]}*.`, { parse_mode: 'Markdown' });
 }
 
-// Fungsi utama untuk memproses pesan
+// Fungsi utama untuk memproses pesan teks dari grup
 async function processGroupMessage(msg) {
   const chatId = msg.chat.id;
   const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
+
   if (!text) return;
 
-  // Jika pesan adalah perintah /setlang, proses perintah tersebut
+  // Jika pesan adalah perintah /setlang, proses terlebih dahulu
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Jika pengguna sudah mengatur preferensi bahasa, lakukan terjemahan otomatis
-  const pref = userLanguagePairs[chatId];
-  if (!pref) {
-    // Jika belum, bisa diabaikan atau beri notifikasi (opsional)
-    return;
-  }
+  // Opsional: Abaikan pesan yang merupakan perintah lain (diawali dengan "/")
+  if (text.startsWith('/')) return;
 
-  try {
-    const result = await translate(text, { from: pref.from, to: pref.to });
-    bot.sendMessage(
-      chatId,
-      `*Terjemahan:*\n${result.text}`,
-      { parse_mode: 'Markdown', reply_to_message_id: originalMessageId }
-    );
-  } catch (err) {
-    console.error('Error saat menerjemahkan:', err);
-    bot.sendMessage(
-      chatId,
-      'Terjadi kesalahan saat menerjemahkan pesan.',
-      { reply_to_message_id: originalMessageId }
-    );
+  // Jika pengguna sudah mengatur preferensi bahasa, langsung terjemahkan pesan
+  const pref = userLanguagePairs[chatId];
+  if (pref) {
+    try {
+      const result = await translate(text, { from: pref.from, to: pref.to });
+      bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+    } catch (err) {
+      console.error('Error saat menerjemahkan:', err);
+      bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
+    }
   }
 }
 
