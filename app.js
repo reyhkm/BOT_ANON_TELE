@@ -18,29 +18,32 @@ const app = express();
 app.use(bodyParser.json());
 
 // Struktur data untuk preferensi bahasa per user
-// Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
+// Format: { [chatId]: { from: 'id'|'en'|'ar', to: 'id'|'en'|'ar' } }
+// Di sini misalnya kita mendukung minimal bahasa Inggris, Indonesia, dan Arab
 let userLanguagePairs = {};
 
 // Utility: Mapping alias bahasa ke kode
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
-    arab: 'ar'
+    arab: 'ar',
+    english: 'en',
+    inggris: 'en'
   };
   return mapping[lang.toLowerCase()];
 }
 
 // Handler perintah /setlang
-// Contoh: /setlang indo arab   (artinya: pesan akan diterjemahkan dari Bahasa Indonesia ke Arab)
+// Contoh: /setlang english indo (artinya terjemahkan dari bahasa Inggris ke Indonesia)
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
-    bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
+    bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang english indo');
     return;
   }
   const fromLang = mapLanguage(parts[1]);
   const toLang = mapLanguage(parts[2]);
   if (!fromLang || !toLang) {
-    bot.sendMessage(chatId, 'Bahasa yang didukung hanya: indo dan arab.');
+    bot.sendMessage(chatId, 'Bahasa yang didukung: indo, arab, english.');
     return;
   }
   if (fromLang === toLang) {
@@ -56,45 +59,39 @@ function handleSetLangCommand(chatId, parts) {
 }
 
 // Fungsi utama untuk memproses pesan
-async function processMessage(msg) {
+async function processGroupMessage(msg) {
   const chatId = msg.chat.id;
+  const originalMessageId = msg.message_id;
   const text = msg.text && msg.text.trim();
   if (!text) return;
 
-  // Proses perintah /setlang
+  // Jika pesan adalah perintah /setlang, proses perintah tersebut
   if (text.startsWith('/setlang')) {
     const parts = text.split(' ');
     handleSetLangCommand(chatId, parts);
     return;
   }
 
-  // Jika pesan merupakan perintah lain (misal /help), kita bisa mengabaikannya
-  if (text.startsWith('/')) {
-    // Untuk perintah lain, kita tidak menerjemahkan agar tidak mengganggu alur perintah.
-    return;
-  }
-
-  // Cek apakah user sudah mengatur preferensi bahasa
+  // Jika pengguna sudah mengatur preferensi bahasa, lakukan terjemahan otomatis
   const pref = userLanguagePairs[chatId];
   if (!pref) {
-    // Jika belum, tidak melakukan apa-apa atau bisa dikasih notifikasi (opsional)
+    // Jika belum, bisa diabaikan atau beri notifikasi (opsional)
     return;
   }
 
-  // Lakukan terjemahan otomatis untuk pesan yang diterima
   try {
     const result = await translate(text, { from: pref.from, to: pref.to });
-    // Kirim hasil terjemahan sebagai pesan baru di chat
     bot.sendMessage(
       chatId,
       `*Terjemahan:*\n${result.text}`,
-      { parse_mode: 'Markdown' }
+      { parse_mode: 'Markdown', reply_to_message_id: originalMessageId }
     );
   } catch (err) {
     console.error('Error saat menerjemahkan:', err);
     bot.sendMessage(
       chatId,
-      'Terjadi kesalahan saat menerjemahkan pesan.'
+      'Terjadi kesalahan saat menerjemahkan pesan.',
+      { reply_to_message_id: originalMessageId }
     );
   }
 }
@@ -107,9 +104,8 @@ app.post(`/bot${TOKEN}`, (req, res) => {
 
 // Handler pesan masuk
 bot.on('message', (msg) => {
-  // Proses hanya pesan teks
   if (msg.text) {
-    processMessage(msg);
+    processGroupMessage(msg);
   }
 });
 
