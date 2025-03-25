@@ -1,16 +1,14 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
-const translate = require('@vitalets/google-translate-api'); // Pastikan paket ini sudah terinstall
+const translate = require('@vitalets/google-translate-api');
 
-// Hardcode token dan URL webhook (ganti dengan nilai milikmu)
+// Konfigurasi token dan webhook
 const TOKEN = '7783307198:AAFNOoLG-I-xMsPZMnDSqWXHXFshigXuKxU';
 const WEBHOOK_URL = 'https://botanontele-production.up.railway.app';
+const BOT_MENTION = '@percakapanseru_bot'; // Ganti dengan username bot kamu
 
-// Set nama user bot (sesuaikan dengan username bot-mu)
-const BOT_MENTION = '@percakapanseru_bot';
-
-// Inisialisasi bot dengan mode webhook
+// Inisialisasi bot dengan webhook
 const bot = new TelegramBot(TOKEN, { polling: false });
 bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
   .then(() => console.log(`Webhook telah diset ke ${WEBHOOK_URL}/bot${TOKEN}`))
@@ -20,11 +18,11 @@ bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`)
 const app = express();
 app.use(bodyParser.json());
 
-// Struktur data untuk menyimpan preferensi bahasa setiap user
+// Struktur data untuk preferensi bahasa per user
 // Format: { [chatId]: { from: 'id'|'ar', to: 'ar'|'id' } }
 let userLanguagePairs = {};
 
-// Fungsi untuk mengubah alias bahasa menjadi kode (hanya mendukung indo & arab)
+// Utility: Mapping bahasa
 function mapLanguage(lang) {
   const mapping = {
     indo: 'id',
@@ -33,8 +31,8 @@ function mapLanguage(lang) {
   return mapping[lang.toLowerCase()];
 }
 
-// Fungsi untuk meng-handle perintah /setlang
-// Contoh: /setlang indo arab   (berarti dari bahasa Indonesia ke Arab)
+// Handler perintah /setlang
+// Contoh: /setlang indo arab   (artinya terjemahkan dari Bahasa Indonesia ke Arab)
 function handleSetLangCommand(chatId, parts) {
   if (parts.length < 3) {
     bot.sendMessage(chatId, 'Format salah. Gunakan: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
@@ -54,21 +52,52 @@ function handleSetLangCommand(chatId, parts) {
   bot.sendMessage(chatId, `Preferensi bahasa berhasil disimpan.\nPesan kamu akan diterjemahkan dari *${parts[1]}* ke *${parts[2]}*.`, { parse_mode: 'Markdown' });
 }
 
-// Fungsi untuk menangani terjemahan pesan
-async function handleTranslation(chatId, originalText) {
-  const pref = userLanguagePairs[chatId];
-  if (!pref) {
-    bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab');
+// Fungsi utama untuk memproses pesan grup
+async function processGroupMessage(msg) {
+  const chatId = msg.chat.id;
+  const originalMessageId = msg.message_id;
+  const text = msg.text && msg.text.trim();
+
+  // Pastikan ada teks
+  if (!text) return;
+
+  // Jika perintah /setlang, proses saja
+  if (text.startsWith('/setlang')) {
+    const parts = text.split(' ');
+    handleSetLangCommand(chatId, parts);
     return;
   }
 
-  try {
-    const result = await translate(originalText, { from: pref.from, to: pref.to });
-    // Kirim hasil terjemahan dengan reply ke pesan asli
-    bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
-  } catch (err) {
-    console.error('Error saat menerjemahkan:', err);
-    bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.');
+  // Jika perintah lain, bisa ditambahkan atau diabaikan
+  if (text.startsWith('/')) {
+    bot.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /setlang untuk mengatur preferensi bahasa.');
+    return;
+  }
+
+  // Proses auto translate bila pesan menyebut bot
+  if (text.includes(BOT_MENTION)) {
+    // Hapus mention bot dari teks
+    const cleanedText = text.replace(BOT_MENTION, '').trim();
+    if (!cleanedText) {
+      bot.sendMessage(chatId, 'Tidak ada teks untuk diterjemahkan.', { reply_to_message_id: originalMessageId });
+      return;
+    }
+
+    // Cek apakah preferensi bahasa sudah diatur
+    const pref = userLanguagePairs[chatId];
+    if (!pref) {
+      bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa.\nGunakan perintah: /setlang <asal> <tujuan>\nContoh: /setlang indo arab', { reply_to_message_id: originalMessageId });
+      return;
+    }
+
+    // Lakukan terjemahan
+    try {
+      const result = await translate(cleanedText, { from: pref.from, to: pref.to });
+      bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
+    } catch (err) {
+      console.error('Error saat menerjemahkan:', err);
+      bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.', { reply_to_message_id: originalMessageId });
+    }
   }
 }
 
@@ -78,54 +107,11 @@ app.post(`/bot${TOKEN}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// Handler untuk pesan masuk
+// Handler pesan masuk
 bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  // Hanya proses pesan teks
-  if (!msg.text) return;
-
-  const text = msg.text.trim();
-  const parts = text.split(' ');
-
-  // Perintah /setlang untuk mengatur preferensi bahasa
-  if (text.startsWith('/setlang')) {
-    handleSetLangCommand(chatId, parts);
-    return;
-  }
-
-  // Jika pesan berupa perintah lain, abaikan (atau bisa tambahkan perintah tambahan)
-  if (text.startsWith('/')) {
-    bot.sendMessage(chatId, 'Perintah tidak dikenali. Gunakan /setlang untuk mengatur bahasa.');
-    return;
-  }
-
-  // Cek apakah pesan mengandung tag ke bot
-  if (text.includes(BOT_MENTION)) {
-    // Hapus mention dari pesan (opsional: agar tidak ikut diterjemahkan)
-    const cleanedText = text.replace(BOT_MENTION, '').trim();
-    if (!cleanedText) {
-      bot.sendMessage(chatId, 'Tidak ada teks untuk diterjemahkan.');
-      return;
-    }
-
-    // Simpan message_id asli jika ingin menggunakan reply (misalnya jika ingin reply ke pesan tersebut)
-    const originalMessageId = msg.message_id;
-
-    // Lakukan terjemahan dan kirim hasilnya
-    (async () => {
-      try {
-        const pref = userLanguagePairs[chatId];
-        if (!pref) {
-          bot.sendMessage(chatId, 'Kamu belum mengatur preferensi bahasa. Gunakan /setlang <asal> <tujuan> untuk mengaturnya.');
-          return;
-        }
-        const result = await translate(cleanedText, { from: pref.from, to: pref.to });
-        bot.sendMessage(chatId, `*Terjemahan:*\n${result.text}`, { parse_mode: 'Markdown', reply_to_message_id: originalMessageId });
-      } catch (err) {
-        console.error('Error saat menerjemahkan:', err);
-        bot.sendMessage(chatId, 'Terjadi kesalahan saat menerjemahkan pesan.');
-      }
-    })();
+  // Proses hanya pesan teks
+  if (msg.text) {
+    processGroupMessage(msg);
   }
 });
 
